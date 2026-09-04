@@ -1,0 +1,7 @@
+http_code=403
+response=
+{
+  "message": "Resource not accessible by integration",
+  "documentation_url": "https://docs.github.com/rest/pages/pages#update-information-about-a-apiname-pages-site",
+  "status": "403"
+}
