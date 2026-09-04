@@ -2,8 +2,7 @@ name: Deploy portfolio to GitHub Pages
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +21,30 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
+      - name: Configure repository Pages settings
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/pages"
+          COMMON=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          # Ensure Pages exists and uses GitHub Actions. Also clear the broken custom domain.
+          code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" -L -X PUT "${COMMON[@]}" "$API"             -d '{"build_type":"workflow","cname":null}')
+
+          if [ "$code" = "404" ]; then
+            code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" -L -X POST "${COMMON[@]}" "$API"               -d '{"build_type":"workflow"}')
+          fi
+
+          echo "Pages API status: $code"
+          cat /tmp/pages.json || true
+
+          case "$code" in
+            200|201|204) ;;
+            *) echo "Unable to configure Pages automatically"; exit 1 ;;
+          esac
+
       - name: Checkout
         uses: actions/checkout@v4
 
