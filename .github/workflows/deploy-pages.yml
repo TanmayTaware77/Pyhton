@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -24,50 +24,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure repository Pages settings
-        id: pagescfg
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}/pages"
-          COMMON=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
-
-          code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" -L -X PUT "${COMMON[@]}" "$API"             -d '{"build_type":"workflow","cname":null}')
-
-          if [ "$code" = "404" ]; then
-            code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" -L -X POST "${COMMON[@]}" "$API"               -d '{"build_type":"workflow"}')
-          fi
-
-          {
-            echo "http_code=$code"
-            echo "response="
-            cat /tmp/pages.json || true
-          } > pages-api-status.txt
-
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-
-      - name: Save Pages API diagnostic
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pages-api-status.txt
-          git commit -m "Record Pages API diagnostic [skip ci]" || true
-          git push || true
-
-      - name: Stop if Pages API configuration failed
-        if: ${{ !contains(fromJSON('["200","201","204"]'), steps.pagescfg.outputs.code) }}
-        shell: bash
-        run: |
-          echo "Pages API configuration failed with HTTP ${{ steps.pagescfg.outputs.code }}"
-          cat pages-api-status.txt
-          exit 1
-
-      - name: Configure Pages
+      - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Pages artifact
+      - name: Upload website
         uses: actions/upload-pages-artifact@v3
         with:
           path: .
@@ -75,14 +35,3 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Record successful deployment
-        if: success()
-        shell: bash
-        run: |
-          printf "status=deployed\nurl=%s\ncommit=%s\n" "${{ steps.deployment.outputs.page_url }}" "${GITHUB_SHA}" > deployment-status.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add deployment-status.txt
-          git commit -m "Record successful Pages deployment [skip ci]" || exit 0
-          git push
