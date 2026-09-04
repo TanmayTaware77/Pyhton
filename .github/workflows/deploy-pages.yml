@@ -21,12 +21,15 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Configure repository Pages settings
+        id: pagescfg
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -e
           API="https://api.github.com/repos/${GITHUB_REPOSITORY}/pages"
           COMMON=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${GH_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
 
@@ -36,16 +39,30 @@ jobs:
             code=$(curl -sS -o /tmp/pages.json -w "%{http_code}" -L -X POST "${COMMON[@]}" "$API"               -d '{"build_type":"workflow"}')
           fi
 
-          echo "Pages API status: $code"
-          cat /tmp/pages.json || true
+          {
+            echo "http_code=$code"
+            echo "response="
+            cat /tmp/pages.json || true
+          } > pages-api-status.txt
 
-          case "$code" in
-            200|201|204) ;;
-            *) echo "Unable to configure Pages automatically"; exit 1 ;;
-          esac
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Save Pages API diagnostic
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pages-api-status.txt
+          git commit -m "Record Pages API diagnostic [skip ci]" || true
+          git push || true
+
+      - name: Stop if Pages API configuration failed
+        if: ${{ !contains(fromJSON('["200","201","204"]'), steps.pagescfg.outputs.code) }}
+        shell: bash
+        run: |
+          echo "Pages API configuration failed with HTTP ${{ steps.pagescfg.outputs.code }}"
+          cat pages-api-status.txt
+          exit 1
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
